@@ -64,7 +64,17 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         heap_init();
     }
 
-    // Initialize logging with the COM2 port and set the level filter to Debug.
+    // Initialize UEFI console logger so the user sees at least one message on screen
+    if let Err(e) = uefi::helpers::init(&mut system_table) {
+        // If this fails, we still continue with serial logging below
+        // but there will be no on-screen message.
+        let _ = e;
+    } else {
+        // Inform the user that subsequent logs will be redirected to the serial port
+        log::info!("illusion.efi started. Subsequent logs are redirected to the serial port (COM1 @ 115200). If you don't see more output here, check the serial console.");
+    }
+
+    // Initialize logging with the COM1 port and set the level filter to Debug.
     logger::init(SerialPort::COM1, LevelFilter::Debug);
 
     info!("The Matrix is an illusion");
