@@ -3,7 +3,7 @@
 
 mod images;
 
-use uefi::{prelude::*, table::boot::LoadImageSource};
+use uefi::{prelude::*, proto::loaded_image::LoadedImage, table::boot::LoadImageSource};
 
 #[entry]
 unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
@@ -29,12 +29,24 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
                 },
             ) {
                 Ok(handle) => {
-                    log::info!("[5/8] Loaded hypervisor into memory, starting..");
+                    // Provide detailed information about the loaded hypervisor image before starting it
+                    match system_table.boot_services().open_protocol_exclusive::<LoadedImage>(handle) {
+                        Ok(li) => {
+                            let (base, size) = li.info();
+                            log::info!("[5/8] Loaded hypervisor image: base={:#x}, size={:#x} ({} bytes)", base as usize, size, size);
+                            log::debug!("[5/8] Hypervisor memory types: code={:?}, data={:?}", li.code_type(), li.data_type());
+                        }
+                        Err(e) => {
+                            log::warn!("[5/8] Loaded hypervisor, but failed to query LoadedImage info ({:?})", e);
+                        }
+                    }
 
+                    log::info!("[5/8] Transferring control to hypervisor entry (StartImage)..");
                     if let Err(error) = system_table.boot_services().start_image(handle) {
                         log::error!("Failed to start hypervisor ({:?})", error);
                         return Status::ABORTED;
                     }
+                    log::info!("[5/8] Hypervisor returned control to loader");
                 }
                 Err(error) => {
                     log::error!("Failed to load hypervisor ({:?})", error);
