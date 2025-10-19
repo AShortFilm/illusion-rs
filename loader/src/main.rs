@@ -8,15 +8,18 @@ use uefi::{prelude::*, table::boot::LoadImageSource};
 #[entry]
 unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
     if let Err(error) = uefi::helpers::init(&mut system_table) {
-        log::error!("Failed to initialize UEFI services ({:?})", error);
+        log::error!("[0/8] Failed to initialize UEFI services ({:?})", error);
         return Status::ABORTED;
     }
 
-    log::info!("Searching Illusion hypervisor (illusion.efi)..");
+    log::info!("[1/8] UEFI services initialized");
+
+    log::info!("[2/8] Searching Illusion hypervisor (illusion.efi)..");
 
     match images::find_hypervisor(system_table.boot_services()) {
         Some(hypervisor_device_path) => {
-            log::info!("Found! Loading hypervisor into memory..");
+            log::info!("[3/8] Found hypervisor device path");
+            log::info!("[4/8] Loading hypervisor into memory..");
 
             match system_table.boot_services().load_image(
                 image_handle,
@@ -26,7 +29,7 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
                 },
             ) {
                 Ok(handle) => {
-                    log::info!("Loaded hypervisor into mermoy, starting..");
+                    log::info!("[5/8] Loaded hypervisor into memory, starting..");
 
                     if let Err(error) = system_table.boot_services().start_image(handle) {
                         log::error!("Failed to start hypervisor ({:?})", error);
@@ -40,17 +43,19 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
             }
         }
         None => {
-            log::info!("Failed to find hypervisor image");
+            log::error!("Failed to find hypervisor image");
             return Status::ABORTED;
         }
     };
 
-    log::info!("Searching Windows boot manager (bootmgfw.efi)..");
+    log::info!("[6/8] Searching Windows boot manager (bootmgfw.efi)..");
 
     match images::find_windows_boot_manager(system_table.boot_services()) {
         Some(bootmgr_device_path) => {
-            log::info!("Found! Loading boot manager into memory..");
+            log::info!("[7/8] Found Windows boot manager device path");
+            log::info!("Loading boot manager into memory..");
 
+            log::info!("Stalling for 3 seconds before handing off to Windows boot manager..");
             system_table.boot_services().stall(3_000_000);
 
             match system_table.boot_services().load_image(
@@ -61,7 +66,7 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
                 },
             ) {
                 Ok(handle) => {
-                    log::info!("Loaded boot manager into memory, starting..");
+                    log::info!("[8/8] Loaded boot manager into memory, starting..");
 
                     if let Err(error) = system_table.boot_services().start_image(handle) {
                         log::error!("Failed to start boot manager ({:?})", error);
@@ -75,7 +80,7 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
             }
         }
         None => {
-            log::info!("Failed to find Windows boot manager image");
+            log::error!("Failed to find Windows boot manager image");
             return Status::ABORTED;
         }
     }
