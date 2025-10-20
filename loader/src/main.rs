@@ -106,14 +106,18 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
             }
         }
         log::info!("Press ENTER to select option 1 (default). Press ESC to abort.");
+        log::info!("Defaulting to option 1 automatically in 5 seconds if no input is received.");
 
-        // Read from console input until a valid selection is made
-        let stdin = system_table.stdin();
-        let _ = stdin.reset(false);
+        // Read from console input until a valid selection is made or a timeout occurs
+        let _ = system_table.stdin().reset(false);
 
         let mut selection: usize = 0; // default to first option
+        let timeout_ms: u64 = 5_000; // 5 seconds
+        let poll_interval_us: u64 = 10_000; // 10ms per poll
+        let mut waited_us: u64 = 0;
+
         'sel_loop: loop {
-            match stdin.read_key() {
+            match system_table.stdin().read_key() {
                 Ok(Some(key)) => {
                     use uefi::proto::console::text::{Key, ScanCode};
                     match key {
@@ -137,10 +141,12 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
                     }
                 }
                 Ok(None) => {
-                    // No key yet, avoid busy-waiting
-                    for _ in 0..50_000 {
-                        core::hint::spin_loop();
+                    if waited_us >= timeout_ms * 1000 {
+                        log::info!("No selection made within {} seconds, defaulting to option 1.", timeout_ms / 1000);
+                        break 'sel_loop;
                     }
+                    system_table.boot_services().stall(poll_interval_us as usize);
+                    waited_us += poll_interval_us;
                 }
                 Err(e) => {
                     log::warn!("Failed to read key from console ({:?}), defaulting to option 1", e);
