@@ -22,7 +22,14 @@ use {
 const WINDOWS_BOOT_MANAGER_PATH: &CStr16 = cstr16!(r"\EFI\Microsoft\Boot\bootmgfw.efi");
 const HYPERVISOR_PATH: &CStr16 = cstr16!(r"\EFI\Boot\illusion.efi");
 
-/// Finds the device path for a given file path.
+/// Represents a bootable target discovered on a specific filesystem handle.
+pub(crate) struct BootTarget {
+    pub device_path: Box<DevicePath>,
+    pub handle: Handle,
+    pub handle_index: usize,
+}
+
+/// Finds the device path for a given file path and returns the first match.
 ///
 /// # Arguments
 ///
@@ -34,6 +41,11 @@ const HYPERVISOR_PATH: &CStr16 = cstr16!(r"\EFI\Boot\illusion.efi");
 /// If a device containing the specified file is found, this function returns an `Option` containing
 /// a `DevicePath` to the file. If no such device is found, it returns `None`.
 pub(crate) fn find_device_path(boot_services: &BootServices, path: &CStr16) -> Option<Box<DevicePath>> {
+    enumerate_device_paths(boot_services, path).into_iter().map(|t| t.device_path).next()
+}
+
+/// Enumerates all device paths for a given file path across all SimpleFileSystem handles.
+pub(crate) fn enumerate_device_paths(boot_services: &BootServices, path: &CStr16) -> Vec<BootTarget> {
     let handles: HandleBuffer = match boot_services.locate_handle_buffer(SearchType::ByProtocol(&SimpleFileSystem::GUID)) {
         Ok(h) => {
             log::info!("Discovered {} SimpleFileSystem handle(s) while searching for the target path", h.len());
@@ -41,9 +53,11 @@ pub(crate) fn find_device_path(boot_services: &BootServices, path: &CStr16) -> O
         }
         Err(_) => {
             log::error!("Failed to locate handles for SimpleFileSystem protocol");
-            return None;
+            return Vec::new();
         }
     };
+
+    let mut targets = Vec::new();
 
     for (idx, handle) in handles.iter().enumerate() {
         let idx1 = idx + 1;
@@ -95,14 +109,29 @@ pub(crate) fn find_device_path(boot_services: &BootServices, path: &CStr16) -> O
             }
         };
 
-        log::info!("Selected device path for target on handle {}/{}", idx1, handles.len());
-        return Some(boot_path.to_owned());
+        log::info!("Discovered target on handle {}/{}", idx1, handles.len());
+        targets.push(BootTarget {
+            device_path: boot_path.to_owned(),
+            handle: *handle,
+            handle_index: idx1,
+        });
     }
 
-    None
+    if targets.is_empty() {
+        log::debug!("No device paths found for target");
+    } else {
+        log::info!("Found {} candidate target(s)", targets.len());
+    }
+
+    targets
 }
 
-/// Finds the device path of the Windows boot manager.
+/// Finds all device paths of the Windows boot manager across all attached filesystems.
+pub(crate) fn find_all_windows_boot_managers(boot_services: &BootServices) -> Vec<BootTarget> {
+    enumerate_device_paths(boot_services, WINDOWS_BOOT_MANAGER_PATH)
+}
+
+/// Finds the device path of the Windows boot manager (first match).
 ///
 /// # Arguments
 ///
