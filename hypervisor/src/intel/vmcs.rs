@@ -135,7 +135,7 @@ impl Vmcs {
 
         vmwrite(vmcs::host::TR_BASE, host_descriptor.tss.base);
         vmwrite(vmcs::host::GDTR_BASE, host_descriptor.gdtr.base as u64);
-        vmwrite(vmcs::host::IDTR_BASE, u64::MAX); // Bogus. No proper exception handling.
+        vmwrite(vmcs::host::IDTR_BASE, host_descriptor.idtr.base as u64);
 
         log::debug!("Host Registers State setup successfully!");
 
