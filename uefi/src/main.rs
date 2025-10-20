@@ -9,10 +9,7 @@ extern crate alloc;
 
 use {
     crate::{processor::start_hypervisor_on_all_processors, setup::setup, stack::init},
-    hypervisor::{
-        allocator::heap_init,
-        logger::{self, SerialPort},
-    },
+    hypervisor::allocator::heap_init,
     log::*,
     uefi::prelude::*,
 };
@@ -64,8 +61,18 @@ fn main(_image_handle: Handle, mut system_table: SystemTable<Boot>) -> Status {
         heap_init();
     }
 
-    // Initialize logging with the COM2 port and set the level filter to Debug.
-    logger::init(SerialPort::COM1, LevelFilter::Debug);
+    // Initialize UEFI console logger so the user sees at least one message on screen
+    if let Err(e) = uefi::helpers::init(&mut system_table) {
+        // If this fails, we still continue with serial logging below
+        // but there will be no on-screen message.
+        let _ = e;
+    } else {
+        // Inform the user that logs will be printed to the EFI Shell console
+        log::info!("illusion.efi started. Logging to EFI Shell console. For more details, ensure the log level is set appropriately.");
+    }
+
+    // Ensure the UEFI logger prints debug messages too
+    log::set_max_level(LevelFilter::Debug);
 
     info!("The Matrix is an illusion");
 
