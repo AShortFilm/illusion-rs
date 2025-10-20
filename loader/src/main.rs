@@ -42,7 +42,6 @@ unsafe fn main(image_handle: Handle, mut system_table: SystemTable<Boot>) -> Sta
                     }
 
                     log::info!("[5/8] Transferring control to hypervisor entry (StartImage)..");
-                    log::info!("Note: illusion.efi logs will be emitted on the serial port (COM1 @ 115200). The UEFI console may appear idle until the hypervisor returns.");
                     if let Err(error) = system_table.boot_services().start_image(handle) {
                         log::error!("Failed to start hypervisor ({:?})", error);
                         return Status::ABORTED;
